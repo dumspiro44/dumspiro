@@ -1,3 +1,4 @@
+
 // Shared types across the application
 
 export enum TranslationStatus {

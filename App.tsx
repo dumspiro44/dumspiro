@@ -1420,7 +1420,6 @@ const Posts = () => {
           </tbody>
         </table>
       </div>
-
       <EditTranslationModal 
         isOpen={editModalOpen}
         onClose={() => setEditModalOpen(false)}
@@ -1437,89 +1436,64 @@ const Jobs = () => {
   const [jobs, setJobs] = useState<TranslationJob[]>([]);
 
   useEffect(() => {
-    const fetchJobs = () => {
-      // Simulate processing cycle
+    const interval = setInterval(() => {
       MockBackend.processJobQueue();
       MockBackend.getJobs().then(setJobs);
-    };
-    
-    fetchJobs();
-    const interval = setInterval(fetchJobs, 1000); // Faster polling for demo
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const getStatusColor = (status: TranslationStatus) => {
-    switch (status) {
-      case TranslationStatus.COMPLETED: return 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20';
-      case TranslationStatus.PROCESSING: return 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/20';
-      case TranslationStatus.FAILED: return 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/20';
-      default: return 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/20';
-    }
-  };
-
-  const getIcon = (status: TranslationStatus) => {
-    switch (status) {
-      case TranslationStatus.COMPLETED: return CheckCircle;
-      case TranslationStatus.PROCESSING: return Loader2;
-      case TranslationStatus.FAILED: return XCircle;
-      default: return Loader2;
-    }
-  };
-
   return (
-    <div className="space-y-6">
-      <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{t.jobs.title}</h2>
-      
-      <div className="grid gap-4">
-        {jobs.length === 0 && (
-          <p className="text-gray-500">No active jobs.</p>
-        )}
-        {jobs.map(job => {
-          const Icon = getIcon(job.status);
-          return (
-            <div key={job.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl flex items-center justify-between shadow-sm transition-colors duration-200">
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-full ${getStatusColor(job.status)}`}>
-                  <Icon className={`w-5 h-5 ${job.status === TranslationStatus.PROCESSING ? 'animate-spin' : ''}`} />
-                </div>
-                <div>
-                  <h4 className="text-gray-900 dark:text-white font-medium">{t.jobs.translatePost} #{job.postId}</h4>
-                  <div className="flex gap-2 text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    <span className="uppercase">{job.sourceLang}</span>
-                    <span>→</span>
-                    <span className="uppercase">{job.targetLang}</span>
-                    <span className="mx-2">•</span>
-                    <span>{new Date(job.createdAt).toLocaleTimeString()}</span>
-                  </div>
-                  {job.error && (
-                    <p className="text-red-500 dark:text-red-400 text-xs mt-1">{job.error}</p>
-                  )}
-                </div>
-              </div>
-              
-              <div className="w-32">
-                <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  <span>{t.jobs.progress}</span>
-                  <span>{job.progress || 0}%</span>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                  <div 
-                    className={`h-1.5 rounded-full transition-all duration-500 ${
-                      job.status === TranslationStatus.FAILED ? 'bg-red-500' : 'bg-blue-500'
-                    }`} 
-                    style={{ width: `${job.progress || 0}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <div>
+       <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">{t.jobs.title}</h2>
+       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm transition-colors duration-200">
+          <table className="w-full text-left border-collapse">
+             <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 text-xs uppercase font-semibold">
+                <tr>
+                   <th className="px-6 py-4">Job ID</th>
+                   <th className="px-6 py-4">Task</th>
+                   <th className="px-6 py-4">Status</th>
+                   <th className="px-6 py-4 w-1/3">Progress</th>
+                   <th className="px-6 py-4 text-right">Time</th>
+                </tr>
+             </thead>
+             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {jobs.length === 0 ? (
+                   <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500">No active jobs.</td>
+                   </tr>
+                ) : jobs.map(job => (
+                   <tr key={job.id}>
+                      <td className="px-6 py-4 font-mono text-xs text-gray-500">{job.id}</td>
+                      <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{job.title}</td>
+                      <td className="px-6 py-4">
+                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                            job.status === TranslationStatus.COMPLETED ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                            job.status === TranslationStatus.PROCESSING ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                            'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                         }`}>
+                            {job.status}
+                         </span>
+                      </td>
+                      <td className="px-6 py-4">
+                         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
+                            <div 
+                              className="bg-blue-600 h-2.5 rounded-full transition-all duration-500 ease-out" 
+                              style={{ width: `${job.progress}%` }}
+                            ></div>
+                         </div>
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-500">
+                         {new Date(job.createdAt).toLocaleTimeString()}
+                      </td>
+                   </tr>
+                ))}
+             </tbody>
+          </table>
+       </div>
     </div>
   );
 };
-
-// --- Main App Shell ---
 
 const App = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -1527,56 +1501,43 @@ const App = () => {
   const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (isDarkMode) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
+    if (isDarkMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-  };
+  const toggleTheme = () => setIsDarkMode(!isDarkMode);
+  const t = TRANSLATIONS[lang];
 
   return (
-    <LanguageContext.Provider value={{ lang, setLang, t: TRANSLATIONS[lang] }}>
-      <ThemeContext.Provider value={{ isDarkMode, toggleTheme }}>
+    <ThemeContext.Provider value={{ isDarkMode, toggleTheme }}>
+      <LanguageContext.Provider value={{ lang, setLang, t }}>
         <HashRouter>
-          <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 font-sans transition-colors duration-200">
+          <div className="min-h-screen flex bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
             <Sidebar />
-            <main className="ml-72 flex-1 p-8 overflow-y-auto h-screen flex flex-col">
-              
-              {/* Top Bar / Help Trigger */}
-              <div className="flex justify-end mb-4">
-                <div className="flex gap-3 items-center">
-                   <button 
+            <main className="flex-1 ml-72 p-8 overflow-y-auto h-screen flex flex-col">
+               <div className="flex justify-end mb-4">
+                  <button 
                     onClick={() => setHelpOpen(true)}
-                    className="w-10 h-10 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 shadow-sm border border-gray-200 dark:border-gray-700 transition-all hover:shadow-md"
-                    title="Help / Помощь"
+                    className="text-gray-400 hover:text-blue-500 transition-colors"
                   >
-                    <HelpCircle className="w-5 h-5" />
+                    <HelpCircle className="w-6 h-6" />
                   </button>
-                </div>
-              </div>
+               </div>
 
-              <div className="max-w-6xl mx-auto w-full flex-1">
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/posts" element={<Posts />} />
-                  <Route path="/jobs" element={<Jobs />} />
-                </Routes>
-              </div>
-              
-              <Footer />
+               <Routes>
+                 <Route path="/" element={<Dashboard />} />
+                 <Route path="/posts" element={<Posts />} />
+                 <Route path="/jobs" element={<Jobs />} />
+                 <Route path="/settings" element={<Settings />} />
+               </Routes>
+
+               <Footer />
             </main>
+            <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
           </div>
-          
-          <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
         </HashRouter>
-      </ThemeContext.Provider>
-    </LanguageContext.Provider>
+      </LanguageContext.Provider>
+    </ThemeContext.Provider>
   );
 };
 
