@@ -15,6 +15,7 @@ export interface WPSettings {
   targetLangs: string[];
   postTypes: string[];
   geminiApiKey?: string; // New field for API Key
+  systemInstruction?: string; // Custom system prompt
 }
 
 export interface AppSettings {

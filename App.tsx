@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -16,6 +17,7 @@ import {
   Save,
   X,
   Eye,
+  EyeOff,
   Crown,
   Moon,
   Sun,
@@ -85,13 +87,28 @@ const INITIAL_MOCK_POSTS: WPPost[] = [
 
 const INITIAL_SETTINGS: WPSettings = {
   wpUrl: 'https://demo.wordpress.site',
-  wpUser: 'demo_admin',
-  wpAppPassword: 'abcd-1234-efgh-5678',
+  wpUser: '',
+  wpAppPassword: '',
   sourceLang: 'en',
   targetLangs: ['sk', 'cs', 'kk', 'mo'],
   postTypes: ['post', 'page'],
-  geminiApiKey: ''
+  geminiApiKey: '',
+  systemInstruction: ''
 };
+
+const LANGUAGES_CONFIG = [
+    { code: 'en', name: 'English', country: 'us' },
+    { code: 'sk', name: 'Slovak', country: 'sk' },
+    { code: 'kk', name: 'Kazakh', country: 'kz' },
+    { code: 'cs', name: 'Czech', country: 'cz' },
+    { code: 'mo', name: 'Moldovan', country: 'md' },
+    { code: 'es', name: 'Spanish', country: 'es' },
+    { code: 'fr', name: 'French', country: 'fr' },
+    { code: 'de', name: 'German', country: 'de' },
+    { code: 'ru', name: 'Russian', country: 'ru' },
+    { code: 'pl', name: 'Polish', country: 'pl' },
+    { code: 'hu', name: 'Hungarian', country: 'hu' },
+];
 
 // Simulates a backend service using LocalStorage
 class MockBackend {
@@ -271,17 +288,20 @@ const TRANSLATIONS = {
       title: 'Configuration',
       wpConnection: 'WordPress Connection',
       wpUrl: 'WordPress URL',
-      username: 'Username',
-      appPassword: 'Application Password',
+      username: 'Admin name',
+      appPassword: 'Admin password',
       testConnection: 'Test Connection',
       targetLangs: 'Target Languages',
       aiEngine: 'Translation Engine (Gemini)',
       apiKey: 'Gemini API Key',
-      apiKeyPlaceholder: 'Enter your Google AI Studio API Key...',
+      apiKeyPlaceholder: 'Enter your API Key...',
       apiKeyHelp: 'Required to access the model.',
       getKeyLink: 'Get your free API Key here',
       model: 'Model',
       sysInstruction: 'System Instruction',
+      defaultSysInstruction: 'You are a professional translator. Preserve all HTML tags, classes, and IDs. Do not translate URLs.',
+      geminiFlash: 'Gemini 2.5 Flash (Recommended)',
+      geminiPro: 'Gemini 2.5 Pro (High Reasoning)',
       saveConfig: 'Save Configuration',
       saving: 'Saving...',
       saved: 'Configuration Saved!',
@@ -325,6 +345,19 @@ const TRANSLATIONS = {
       step3: '3. Translate: Click "Translate Selected" to start the batch job.',
       step4: '4. Review: Monitor progress in Translation Jobs and edit results manually if needed.',
       copyright: 'Perspektiva Impereal © 2025'
+    },
+    languages: {
+      en: 'English',
+      sk: 'Slovak',
+      kk: 'Kazakh',
+      cs: 'Czech',
+      mo: 'Moldovan',
+      es: 'Spanish',
+      fr: 'French',
+      de: 'German',
+      ru: 'Russian',
+      pl: 'Polish',
+      hu: 'Hungarian',
     }
   },
   ru: {
@@ -374,17 +407,20 @@ const TRANSLATIONS = {
       title: 'Настройки',
       wpConnection: 'Подключение к WordPress',
       wpUrl: 'URL сайта WordPress',
-      username: 'Имя пользователя',
-      appPassword: 'Пароль приложения',
+      username: 'Имя администратора',
+      appPassword: 'Пароль администратора',
       testConnection: 'Проверить',
       targetLangs: 'Целевые языки',
       aiEngine: 'Движок перевода (Gemini)',
       apiKey: 'API Ключ Gemini',
-      apiKeyPlaceholder: 'Введите ваш API ключ Google AI Studio...',
+      apiKeyPlaceholder: 'Введите ваш API ключ...',
       apiKeyHelp: 'Необходим для доступа к модели.',
       getKeyLink: 'Получить API ключ здесь',
       model: 'Модель',
       sysInstruction: 'Системная инструкция',
+      defaultSysInstruction: 'Вы профессиональный переводчик. Сохраняйте все HTML теги, классы и ID. Не переводите URL-адреса.',
+      geminiFlash: 'Gemini 2.5 Flash (Рекомендуется)',
+      geminiPro: 'Gemini 2.5 Pro (Высокое мышление)',
       saveConfig: 'Сохранить настройки',
       saving: 'Сохранение...',
       saved: 'Настройки сохранены!',
@@ -428,6 +464,19 @@ const TRANSLATIONS = {
       step3: '3. Перевод: Нажмите "Перевести выбранное" для запуска пакетной задачи.',
       step4: '4. Проверка: Следите за прогрессом в Задачах перевода и редактируйте результаты вручную при необходимости.',
       copyright: 'Perspektiva Impereal © 2025'
+    },
+    languages: {
+      en: 'Английский',
+      sk: 'Словацкий',
+      kk: 'Казахский',
+      cs: 'Чешский',
+      mo: 'Молдавский',
+      es: 'Испанский',
+      fr: 'Французский',
+      de: 'Немецкий',
+      ru: 'Русский',
+      pl: 'Польский',
+      hu: 'Венгерский',
     }
   }
 };
@@ -597,18 +646,17 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
 const Footer = () => {
   return (
     <footer className="mt-auto py-6 border-t border-gray-200 dark:border-gray-700 text-center">
-      <div className="text-sm text-gray-500 dark:text-gray-400">
-        <p>
-          &copy; {new Date().getFullYear()} Perspektiva Impereal. All rights reserved.
-        </p>
+      <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1">
+        <span>&copy; {new Date().getFullYear()}</span>
         <a 
           href="https://czholding.com.ua/" 
           target="_blank" 
           rel="noopener noreferrer"
-          className="text-gold-600 dark:text-gold-500 hover:underline mt-1 inline-flex items-center gap-1"
+          className="text-gold-600 dark:text-gold-500 hover:underline inline-flex items-center gap-1 font-medium"
         >
-          CZ Holding <Globe className="w-3 h-3" />
+          Perspektiva Impereal
         </a>
+        <span>. All rights reserved.</span>
       </div>
     </footer>
   );
@@ -649,7 +697,7 @@ const Dashboard = () => {
 
             {/* API Connection Signal */}
             <button 
-                onClick={() => navigate('/settings')}
+                onClick={() => navigate('/settings', { state: { scrollTo: 'api-key-section' } })}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
                     checks.api 
                     ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 cursor-default'
@@ -740,6 +788,7 @@ const Dashboard = () => {
 
 const Settings = () => {
   const { t } = useContext(LanguageContext);
+  const location = useLocation();
   const [settings, setSettings] = useState<WPSettings>({
     wpUrl: '',
     wpUser: '',
@@ -747,11 +796,13 @@ const Settings = () => {
     sourceLang: 'en',
     targetLangs: [],
     postTypes: [],
-    geminiApiKey: ''
+    geminiApiKey: '',
+    systemInstruction: ''
   });
   
   const [polylangStatus, setPolylangStatus] = useState<'idle' | 'checking' | 'active' | 'missing' | 'installing'>('idle');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     MockBackend.getSettings().then(data => {
@@ -767,20 +818,21 @@ const Settings = () => {
     });
   }, []);
 
-  // Added country codes for FlagCDN (md for Moldova, kz for Kazakhstan, etc.)
-  const availableLanguages = [
-    { code: 'en', name: 'English', country: 'us' },
-    { code: 'sk', name: 'Slovak', country: 'sk' },
-    { code: 'kk', name: 'Kazakh', country: 'kz' },
-    { code: 'cs', name: 'Czech', country: 'cz' },
-    { code: 'mo', name: 'Moldovan', country: 'md' },
-    { code: 'es', name: 'Spanish', country: 'es' },
-    { code: 'fr', name: 'French', country: 'fr' },
-    { code: 'de', name: 'German', country: 'de' },
-    { code: 'ru', name: 'Russian', country: 'ru' },
-    { code: 'pl', name: 'Polish', country: 'pl' },
-    { code: 'hu', name: 'Hungarian', country: 'hu' },
-  ];
+  useEffect(() => {
+    const state = location.state as { scrollTo?: string } | null;
+    if (state?.scrollTo) {
+      const element = document.getElementById(state.scrollTo);
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.classList.add('ring-2', 'ring-purple-500', 'ring-offset-2', 'dark:ring-offset-gray-800');
+          setTimeout(() => {
+             element.classList.remove('ring-2', 'ring-purple-500', 'ring-offset-2', 'dark:ring-offset-gray-800');
+          }, 1500);
+        }, 300);
+      }
+    }
+  }, [location]);
 
   const handleChange = (field: keyof WPSettings, value: any) => {
     setSettings(prev => ({ ...prev, [field]: value }));
@@ -854,17 +906,28 @@ const Settings = () => {
                 value={settings.wpUser}
                 onChange={(e) => handleChange('wpUser', e.target.value)}
                 className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-3 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-colors"
+                placeholder="e.g. admin"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">{t.settings.appPassword}</label>
-              <input 
-                type="password" 
-                value={settings.wpAppPassword}
-                onChange={(e) => handleChange('wpAppPassword', e.target.value)}
-                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-3 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-colors"
-              />
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={settings.wpAppPassword}
+                  onChange={(e) => handleChange('wpAppPassword', e.target.value)}
+                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-3 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-colors pr-10"
+                  placeholder="xxxx-xxxx-xxxx-xxxx"
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
             </div>
           </div>
           
@@ -929,18 +992,19 @@ const Settings = () => {
             </div>
             {t.settings.targetLangs}
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {availableLanguages.map(lang => (
+          {/* Changed grid-cols-4 to grid-cols-3 to allow more space for Russian text */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {LANGUAGES_CONFIG.map(lang => (
               <button
                 key={lang.code}
                 onClick={() => toggleLanguage(lang.code)}
-                className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                className={`flex items-center gap-3 p-3 rounded-lg border transition-all relative overflow-hidden ${
                   settings.targetLangs && settings.targetLangs.includes(lang.code)
                     ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20'
                     : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600'
                 }`}
               >
-                <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                <div className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 ${
                   settings.targetLangs && settings.targetLangs.includes(lang.code) ? 'border-white bg-white/20' : 'border-gray-400 dark:border-gray-600'
                 }`}>
                   {settings.targetLangs && settings.targetLangs.includes(lang.code) && <Check className="w-3 h-3 text-white" />}
@@ -951,9 +1015,10 @@ const Settings = () => {
                   width="24"
                   height="18"
                   alt={lang.name}
-                  className="mr-1 rounded-sm shadow-sm"
+                  className="mr-1 rounded-sm shadow-sm flex-shrink-0"
                 />
-                <span className="font-medium">{lang.name}</span>
+                {/* Added truncate and text-sm to handle long language names */}
+                <span className="font-medium text-sm truncate">{(t.languages as any)[lang.code] || lang.name}</span>
               </button>
             ))}
           </div>
@@ -968,7 +1033,7 @@ const Settings = () => {
 
           <div className="space-y-6">
             {/* API Key Input */}
-             <div>
+             <div id="api-key-section" className="transition-all duration-300 rounded-lg">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">{t.settings.apiKey}</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -998,8 +1063,8 @@ const Settings = () => {
              <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">{t.settings.model}</label>
               <select className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-3 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-colors">
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (High Reasoning)</option>
+                <option value="gemini-2.5-flash">{t.settings.geminiFlash}</option>
+                <option value="gemini-2.5-pro">{t.settings.geminiPro}</option>
               </select>
             </div>
 
@@ -1007,7 +1072,9 @@ const Settings = () => {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">{t.settings.sysInstruction}</label>
               <textarea 
                 className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-3 text-gray-900 dark:text-white h-32 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-colors"
-                defaultValue="You are a professional translator. Preserve all HTML tags, classes, and IDs. Do not translate URLs."
+                value={settings.systemInstruction || ''}
+                onChange={(e) => handleChange('systemInstruction', e.target.value)}
+                placeholder={t.settings.defaultSysInstruction}
               ></textarea>
             </div>
           </div>
