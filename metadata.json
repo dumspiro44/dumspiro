@@ -1,0 +1,5 @@
+{
+  "name": "WP PolyLingo Auto-Translator",
+  "description": "External microservice to automate WordPress translations using Polylang and Gemini AI.",
+  "requestFramePermissions": []
+}
