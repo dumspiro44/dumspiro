@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { HashRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Settings as SettingsIcon, 
@@ -24,7 +24,11 @@ import {
   DownloadCloud,
   AlertTriangle,
   Key,
-  Database
+  Database,
+  Wifi,
+  WifiOff,
+  Server,
+  ServerOff
 } from 'lucide-react';
 import { WPSettings, WPPost, TranslationJob, TranslationStatus } from './types';
 
@@ -91,11 +95,15 @@ const INITIAL_SETTINGS: WPSettings = {
 
 // Simulates a backend service using LocalStorage
 class MockBackend {
+  static getSettingsSync(): WPSettings {
+    const stored = localStorage.getItem('wp_settings');
+    return stored ? JSON.parse(stored) : INITIAL_SETTINGS;
+  }
+
   static getSettings(): Promise<WPSettings> {
     return new Promise(resolve => {
       setTimeout(() => {
-        const stored = localStorage.getItem('wp_settings');
-        resolve(stored ? JSON.parse(stored) : INITIAL_SETTINGS);
+        resolve(this.getSettingsSync());
       }, DEMO_DELAY);
     });
   }
@@ -158,6 +166,9 @@ class MockBackend {
 
       postIds.forEach(pid => {
         targetLangs.forEach(lang => {
+          // Basic check: don't translate if target same as source (simplified for demo)
+          if (lang === 'en') return; 
+
           jobs.unshift({
             id: `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             postId: pid,
@@ -237,6 +248,7 @@ const TRANSLATIONS = {
       viewEdit: 'Translations (View/Edit)',
       error: 'Error',
       demoMode: 'DEMO MODE',
+      noLangs: 'No languages selected',
     },
     dashboard: {
       title: 'Overview',
@@ -250,6 +262,10 @@ const TRANSLATIONS = {
       success: 'Success',
       translatedMsg: 'Translated post to',
       ago: 'ago',
+      wpConnected: 'WP Connected',
+      wpDisconnected: 'Connect WP',
+      apiConnected: 'API Ready',
+      apiDisconnected: 'Setup API',
     },
     settings: {
       title: 'Configuration',
@@ -335,6 +351,7 @@ const TRANSLATIONS = {
       viewEdit: 'Переводы (Просмотр/Ред.)',
       error: 'Ошибка',
       demoMode: 'ДЕМО РЕЖИМ',
+      noLangs: 'Языки не выбраны',
     },
     dashboard: {
       title: 'Обзор',
@@ -348,6 +365,10 @@ const TRANSLATIONS = {
       success: 'Успешно',
       translatedMsg: 'Переведен пост на',
       ago: 'назад',
+      wpConnected: 'WP Подключен',
+      wpDisconnected: 'Подключить WP',
+      apiConnected: 'API Готов',
+      apiDisconnected: 'Настроить API',
     },
     settings: {
       title: 'Настройки',
@@ -595,14 +616,55 @@ const Footer = () => {
 
 const Dashboard = () => {
   const { t } = useContext(LanguageContext);
+  const navigate = useNavigate();
+  const [checks, setChecks] = useState({ wp: false, api: false });
+
+  useEffect(() => {
+    // Use synchronous check to avoid flickering state
+    const s = MockBackend.getSettingsSync();
+    setChecks({
+        wp: !!s.wpUrl && s.wpUrl.includes('http'),
+        api: !!s.geminiApiKey
+    });
+  }, []);
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{t.dashboard.title}</h2>
-        <button className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg flex items-center gap-2 transition-all shadow-sm hover:shadow-md">
-          <Zap className="w-4 h-4" />
-          <span>{t.dashboard.runScan}</span>
-        </button>
+        
+        <div className="flex items-center gap-3">
+            {/* WP Connection Signal */}
+            <button 
+                onClick={() => navigate('/settings')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                    checks.wp 
+                    ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 cursor-default'
+                    : 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/30'
+                }`}
+            >
+                {checks.wp ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+                {checks.wp ? t.dashboard.wpConnected : t.dashboard.wpDisconnected}
+            </button>
+
+            {/* API Connection Signal */}
+            <button 
+                onClick={() => navigate('/settings')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                    checks.api 
+                    ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 cursor-default'
+                    : 'bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-200 dark:hover:bg-orange-900/30'
+                }`}
+            >
+                {checks.api ? <Server className="w-4 h-4" /> : <ServerOff className="w-4 h-4" />}
+                {checks.api ? t.dashboard.apiConnected : t.dashboard.apiDisconnected}
+            </button>
+
+            <button className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg flex items-center gap-2 transition-all shadow-sm hover:shadow-md ml-2">
+                <Zap className="w-4 h-4" />
+                <span>{t.dashboard.runScan}</span>
+            </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -692,24 +754,32 @@ const Settings = () => {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   useEffect(() => {
-    MockBackend.getSettings().then(setSettings);
+    MockBackend.getSettings().then(data => {
+      // Safely merge with default array to avoid null/undefined issues
+      setSettings(prev => ({
+        ...data,
+        targetLangs: Array.isArray(data.targetLangs) ? data.targetLangs : []
+      }));
+    });
     MockBackend.checkPolylang().then(active => {
         if (active) setPolylangStatus('active');
         else setPolylangStatus('missing');
     });
   }, []);
 
+  // Added country codes for FlagCDN (md for Moldova, kz for Kazakhstan, etc.)
   const availableLanguages = [
-    { code: 'sk', name: 'Slovak' },
-    { code: 'kk', name: 'Kazakh' },
-    { code: 'cs', name: 'Czech' },
-    { code: 'mo', name: 'Moldovan' },
-    { code: 'es', name: 'Spanish' },
-    { code: 'fr', name: 'French' },
-    { code: 'de', name: 'German' },
-    { code: 'ru', name: 'Russian' },
-    { code: 'pl', name: 'Polish' },
-    { code: 'hu', name: 'Hungarian' },
+    { code: 'en', name: 'English', country: 'us' },
+    { code: 'sk', name: 'Slovak', country: 'sk' },
+    { code: 'kk', name: 'Kazakh', country: 'kz' },
+    { code: 'cs', name: 'Czech', country: 'cz' },
+    { code: 'mo', name: 'Moldovan', country: 'md' },
+    { code: 'es', name: 'Spanish', country: 'es' },
+    { code: 'fr', name: 'French', country: 'fr' },
+    { code: 'de', name: 'German', country: 'de' },
+    { code: 'ru', name: 'Russian', country: 'ru' },
+    { code: 'pl', name: 'Polish', country: 'pl' },
+    { code: 'hu', name: 'Hungarian', country: 'hu' },
   ];
 
   const handleChange = (field: keyof WPSettings, value: any) => {
@@ -875,8 +945,15 @@ const Settings = () => {
                 }`}>
                   {settings.targetLangs && settings.targetLangs.includes(lang.code) && <Check className="w-3 h-3 text-white" />}
                 </div>
+                <img
+                  src={`https://flagcdn.com/24x18/${lang.country}.png`}
+                  srcSet={`https://flagcdn.com/48x36/${lang.country}.png 2x`}
+                  width="24"
+                  height="18"
+                  alt={lang.name}
+                  className="mr-1 rounded-sm shadow-sm"
+                />
                 <span className="font-medium">{lang.name}</span>
-                <span className="text-xs opacity-60 uppercase ml-auto">{lang.code}</span>
               </button>
             ))}
           </div>
@@ -1079,13 +1156,25 @@ const Posts = () => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [currentEditPost, setCurrentEditPost] = useState<WPPost | null>(null);
   const [currentEditLang, setCurrentEditLang] = useState('');
-  const [targetLangs, setTargetLangs] = useState<string[]>([]);
+  
+  // Initialize immediately from localStorage if available to prevent flickering or mismatch
+  const [targetLangs, setTargetLangs] = useState<string[]>(() => {
+    const s = MockBackend.getSettingsSync();
+    return s.targetLangs || [];
+  });
 
   useEffect(() => {
-    MockBackend.getSettings().then(s => setTargetLangs(s.targetLangs || []));
+    // Fetch posts
     MockBackend.getPosts().then(p => {
       setPosts(p);
       setIsLoading(false);
+    });
+    
+    // Also fetch settings asynchronously just in case, but the initial state handles the immediate render
+    MockBackend.getSettings().then(s => {
+        if (Array.isArray(s.targetLangs)) {
+            setTargetLangs(s.targetLangs);
+        }
     });
   }, []);
 
@@ -1219,20 +1308,26 @@ const Posts = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex gap-2">
-                       <div className="w-8 h-8 flex items-center justify-center rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-white text-xs font-bold cursor-default">EN</div>
-                       
+                    <div className="flex gap-2 flex-wrap">
+                       {targetLangs.length === 0 && (
+                           <span className="text-xs text-gray-400 italic flex items-center h-8">{t.common.noLangs}</span>
+                       )}
+
                        {targetLangs.map(lang => {
                          const hasTranslation = post.translations && post.translations[lang];
+                         const isSource = post.lang === lang;
+                         const isActive = hasTranslation || isSource;
+
                          return (
                            <button
                              key={lang}
                              onClick={() => handleOpenEditor(post, lang)}
                              className={`w-8 h-8 flex items-center justify-center rounded text-xs font-bold uppercase transition-all group relative ${
-                               hasTranslation
+                               isActive
                                  ? 'bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-600 dark:hover:text-white border border-transparent'
                                  : 'bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-600 border border-gray-300 dark:border-gray-600 border-dashed hover:border-blue-500 hover:text-blue-500 dark:hover:text-blue-400'
                              }`}
+                             title={isSource ? 'Source Language' : (hasTranslation ? 'Translation Exists' : 'Missing Translation')}
                            >
                              {lang}
                            </button>
