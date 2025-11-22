@@ -1,7 +1,7 @@
+
 version: '3.8'
 
 services:
-  # Database
   postgres:
     image: postgres:15-alpine
     environment:
@@ -12,42 +12,45 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U polylingo -d polylingo_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # Queue
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
 
-  # Backend API
   backend:
     build: 
       context: .
       dockerfile: Dockerfile
-    command: ts-node server/server.ts
+    # Wait for DB, run migrations, then start server
+    command: sh -c "npx prisma migrate deploy && ts-node server/server.ts"
     environment:
       - PORT=3001
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DATABASE_URL=postgres://polylingo:secretpassword@postgres:5432/polylingo_db
-      - API_KEY=${API_KEY}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
     depends_on:
-      - redis
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     ports:
       - "3001:3001"
 
-  # Frontend (Dev mode for demo, or Nginx build in prod)
   frontend:
-    image: node:18-alpine
-    working_dir: /app
-    volumes:
-      - .:/app
-    command: npm start
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
     ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://backend:3001/api
+      - "80:80"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:

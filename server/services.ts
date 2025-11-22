@@ -34,10 +34,6 @@ export class WPService {
       const res = await fetch(`${this.baseUrl}/wp-json/wp/v2/posts?lang=en&per_page=1`, {
         headers: { Authorization: this.authHeader },
       });
-      
-      // If 200 OK, it likely accepts the lang param (Polylang active)
-      // If 400 or ignored, might be missing. 
-      // Note: This is a heuristic. Better way is /wp-json/wp/v2/plugins if user has permission.
       return res.ok; 
     } catch (e) {
       return false;
@@ -46,7 +42,9 @@ export class WPService {
 
   async installPolylang(): Promise<boolean> {
     console.log(`Attempting to install Polylang on ${this.baseUrl}...`);
-    // Mock delay for installation simulation
+    // In a real scenario, this might involve WP-CLI or TGM Plugin Activation logic
+    // For REST API, standard endpoints don't install plugins without custom extensions.
+    // We simulate success for the architecture.
     await new Promise(resolve => setTimeout(resolve, 2000));
     return true;
   }
@@ -80,8 +78,8 @@ export class WPService {
       title: translatedContent.title,
       content: translatedContent.content,
       excerpt: translatedContent.excerpt,
-      status: 'draft', // Safety first
-      lang: targetLang, // Polylang field
+      status: 'draft', 
+      lang: targetLang, 
       type: originalPost.type
     };
 
@@ -101,7 +99,8 @@ export class WPService {
 
     const newPost = await createRes.json();
 
-    // 2. Link translations
+    // 2. Link translations via Polylang logic (often requires updating 'translations' field)
+    // Note: Polylang REST API support varies by version, standard approach assumes 'translations' field is writable
     const existingTranslations = originalPost.translations || {};
     const updatedTranslations = {
       ...existingTranslations,
@@ -109,7 +108,7 @@ export class WPService {
       [originalPost.lang || 'en']: originalPost.id
     };
 
-    // Update BOTH posts
+    // Update BOTH posts to link them
     await this.updatePostTranslations(originalPost.id, originalPost.type, updatedTranslations);
     await this.updatePostTranslations(newPost.id, originalPost.type, updatedTranslations);
 
@@ -134,8 +133,7 @@ export class TranslationService {
   private ai: GoogleGenAI;
 
   constructor(apiKey?: string) {
-    // Use provided key, or fallback to env, or placeholder
-    const key = apiKey || process.env.API_KEY || 'MISSING_KEY'; 
+    const key = apiKey || process.env.API_KEY || ''; 
     this.ai = new GoogleGenAI({ apiKey: key });
   }
 
@@ -166,7 +164,7 @@ export class TranslationService {
         model: 'gemini-2.5-flash',
         contents: prompt,
       });
-      return response.text.trim();
+      return response.text?.trim() || "";
     } catch (error) {
       console.error("Gemini Translation Error", error);
       throw error;

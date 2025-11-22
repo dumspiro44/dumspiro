@@ -1,5 +1,5 @@
 
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { Queue, Worker } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
@@ -16,6 +16,23 @@ const prisma = new PrismaClient();
 const REDIS_CONNECTION = {
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
+};
+
+// --- Auth Middleware ---
+const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+     res.status(401).json({ error: 'Unauthorized' });
+     return;
+  }
+  // Simple token verification (In real prod use JWT.verify)
+  // For this microservice, we check if the token string matches a session or simple secret
+  const token = authHeader.split(' ')[1];
+  if (token !== 'admin-session-token') { // Simplified for example
+     res.status(403).json({ error: 'Forbidden' });
+     return;
+  }
+  next();
 };
 
 // --- Queue Setup ---
@@ -44,14 +61,12 @@ const worker = new Worker('wp-translation-queue', async job => {
   const { postId, postType, sourceLang, targetLang } = job.data;
   const jobId = job.id!;
 
-  // Update Status to PROCESSING in DB
   await prisma.translationJob.update({
     where: { id: jobId },
     data: { status: TranslationStatus.PROCESSING, progress: 10 }
   });
 
   try {
-    // 1. Fetch fresh settings from DB (in case API Key changed)
     const settings = await getSettings();
 
     if (!settings.wpUrl || !settings.geminiApiKey) {
@@ -61,21 +76,20 @@ const worker = new Worker('wp-translation-queue', async job => {
     const wp = new WPService(settings);
     const translator = new TranslationService(settings.geminiApiKey);
 
-    // 2. Fetch original post
+    // Fetch original post
     const posts = await wp.getPosts(postType, sourceLang); 
     const post = posts.find(p => p.id === postId);
 
     if (!post) throw new Error(`Post #${postId} not found`);
 
-    // Log progress
     await prisma.log.create({
       data: { jobId, message: `Fetched Post #${postId}. Starting translation...` }
     });
 
-    // 3. Translate
+    // Translate
     const translatedData = await translator.translatePostBatch(post, sourceLang, targetLang);
 
-    // 4. Create in WP
+    // Create in WP
     const newId = await wp.createTranslation(post, translatedData, targetLang);
 
     // Success
@@ -110,6 +124,27 @@ const worker = new Worker('wp-translation-queue', async job => {
 
 
 // --- API Routes ---
+
+// Login Endpoint
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  const admin = await prisma.admin.findUnique({ where: { username } });
+  
+  // In prod use bcrypt.compare
+  if (admin && admin.passwordHash === password) {
+    res.json({ token: 'admin-session-token' }); // Return a simplified token
+  } else {
+    res.status(401).json({ error: 'Invalid credentials' });
+  }
+});
+
+// Protected Routes
+app.use('/api/settings', authMiddleware);
+app.use('/api/posts', authMiddleware);
+app.use('/api/jobs', authMiddleware);
+app.use('/api/translate', authMiddleware);
+app.use('/api/connect', authMiddleware);
+app.use('/api/wp', authMiddleware);
 
 // Get Settings
 app.get('/api/settings', async (req, res) => {
@@ -151,7 +186,6 @@ app.post('/api/connect', async (req, res) => {
 // Check Polylang
 app.post('/api/wp/check-polylang', async (req, res) => {
   let settings = await getSettings();
-  // Use incoming settings if provided (for testing before saving)
   if (req.body.wpUrl) settings = req.body;
   
   const wp = new WPService(settings);
@@ -167,7 +201,7 @@ app.post('/api/wp/install-polylang', async (req, res) => {
   res.json({ success });
 });
 
-// Get Posts (Proxy through backend to avoid CORS issues in browser if WP is configured that way)
+// Get Posts
 app.get('/api/posts', async (req, res) => {
   const settings = await getSettings();
   if (!settings.wpUrl) return res.status(400).json({ error: "Configure settings first" });
@@ -191,16 +225,14 @@ app.post('/api/translate', async (req, res) => {
 
   for (const pid of postIds) {
     for (const lang of targetLangs) {
-      // Add to BullMQ
       const job = await translationQueue.add('translate-post', {
         postId: pid,
-        postType: postType || 'post', // Default to post if not sent
+        postType: postType || 'post', 
         sourceLang: settings.sourceLang,
         targetLang: lang
       });
       
       if (job.id) {
-        // Create Record in DB
         await prisma.translationJob.create({
           data: {
             id: job.id,
@@ -229,6 +261,20 @@ app.get('/api/jobs', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// Startup Logic: Ensure Admin exists
+prisma.admin.findFirst().then(async (admin) => {
+    if (!admin) {
+        console.log("Creating default admin...");
+        await prisma.admin.create({
+            data: {
+                username: 'admin',
+                passwordHash: process.env.ADMIN_PASSWORD || 'admin' 
+            }
+        });
+    }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
 });
